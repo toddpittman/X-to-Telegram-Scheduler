@@ -53,13 +53,15 @@ class SecureXTelegramScheduler:
         self.check_team_access()
         
     def get_config(self):
-        """Load secure config from environment"""
+        """Load secure config from secrets.toml or environment"""
         try:
+            import streamlit as st
+            secrets = st.secrets if hasattr(st, 'secrets') and st.secrets else {}
             return {
-                "X_BEARER_TOKEN": os.getenv("X_BEARER_TOKEN", st.secrets.get("X_BEARER_TOKEN")),
-                "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN", st.secrets.get("TELEGRAM_BOT_TOKEN")),
-                "APP_PASSWORD": os.getenv("APP_PASSWORD", st.secrets.get("APP_PASSWORD")),
-                "TEAM_PASSWORDS": json.loads(os.getenv("TEAM_PASSWORDS", st.secrets.get("TEAM_PASSWORDS", "{}")))
+                "X_BEARER_TOKEN": secrets.get("api", {}).get("x_bearer_token") or os.getenv("X_BEARER_TOKEN", st.secrets.get("X_BEARER_TOKEN")),
+                "TELEGRAM_BOT_TOKEN": secrets.get("api", {}).get("telegram_bot_token") or os.getenv("TELEGRAM_BOT_TOKEN", st.secrets.get("TELEGRAM_BOT_TOKEN")),
+                "APP_PASSWORD": secrets.get("api", {}).get("app_password") or os.getenv("APP_PASSWORD", st.secrets.get("APP_PASSWORD")),
+                "TEAM_PASSWORDS": secrets.get("api", {}).get("team_passwords") or json.loads(os.getenv("TEAM_PASSWORDS", st.secrets.get("TEAM_PASSWORDS", "{}")))
             }
         except Exception as e:
             st.error(f"Config error: {e}")
