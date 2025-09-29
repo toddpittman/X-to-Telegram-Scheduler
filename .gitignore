@@ -1,4 +1,13 @@
 .env
-__pycache__
+pycache__
 *.pyc
 *.tmp
+
+# Add these important lines:
+.streamlit/secrets.toml
+*.log
+__pycache__/
+.vscode/
+*.tmp
+.DS_Store
+Thumbs.db
