@@ -759,6 +759,9 @@ class SecureXTelegramScheduler:
                     )
                     st.caption(f"{len(edited_text)}/4,096 characters")
                     
+                    # Option to remove X/Twitter links
+                    remove_x_links = st.checkbox("Remove X/Twitter links from text", value=False)
+                    
                     if "selected_channel" in st.session_state:
                         link = st.session_state.channel_links.get(st.session_state.channel_name, "")
                         if link:
@@ -775,8 +778,14 @@ class SecureXTelegramScheduler:
                     else:
                         st.warning("No channel selected")
                 
-                cleaned_text = re.sub(r'https?://(twitter\.com|x\.com)/\S+', '', edited_text)
-                final_text = cleaned_text[:4096].strip()
+                # Only remove X links if checkbox is checked
+                if remove_x_links:
+                    final_text = re.sub(r'https?://(twitter\.com|x\.com)/\S+', '', edited_text).strip()
+                else:
+                    final_text = edited_text.strip()
+                
+                # Truncate to Telegram limit
+                final_text = final_text[:4096]
                 
                 with st.expander("Final Preview", expanded=True):
                     st.markdown("**Text:**")
