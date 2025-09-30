@@ -656,10 +656,8 @@ class SecureXTelegramScheduler:
                         with col_a:
                             st.write(f"**{name}**")
                             st.caption(cid)
-                            # Show full clickable link
                             if st.session_state.channel_links.get(name):
-                                full_link = st.session_state.channel_links[name]
-                                st.markdown(f"[{full_link}]({full_link})")
+                                st.caption(f"🔗 {st.session_state.channel_links[name][:35]}...")
                         with col_b:
                             select_clicked = st.button("Select", key=f"sel_{name}", help=f"Select {name}")
                             if select_clicked:
@@ -757,20 +755,18 @@ class SecureXTelegramScheduler:
                     edited_text = st.text_area(
                         "Edit text (4,096 chars max)", 
                         value=st.session_state.original_text, 
-                        height=200
+                        height=200,
+                        key="edit_text_area"
                     )
                     st.caption(f"{len(edited_text)}/4,096 characters")
-                    
-                    # Option to remove X/Twitter links
-                    remove_x_links = st.checkbox("Remove X/Twitter links from text", value=False)
                     
                     if "selected_channel" in st.session_state:
                         link = st.session_state.channel_links.get(st.session_state.channel_name, "")
                         if link:
-                            st.markdown(f"**Channel link:** [{link}]({link})")
-                            if st.checkbox("Add channel link to post"):
+                            st.caption(f"Channel link: {link}")
+                            if st.checkbox("Add channel link to end of post"):
                                 if link not in edited_text:
-                                    edited_text = edited_text.strip() + f"\n\n{link}"
+                                    edited_text = edited_text + f"\n\n{link}"
                 
                 with col2:
                     st.markdown("**Target Channel:**")
@@ -780,18 +776,13 @@ class SecureXTelegramScheduler:
                     else:
                         st.warning("No channel selected")
                 
-                # Only remove X links if checkbox is checked
-                if remove_x_links:
-                    final_text = re.sub(r'https?://(twitter\.com|x\.com)/\S+', '', edited_text).strip()
-                else:
-                    final_text = edited_text.strip()
-                
-                # Truncate to Telegram limit
-                final_text = final_text[:4096]
+                # Always remove X/Twitter links automatically
+                cleaned_text = re.sub(r'https?://(twitter\.com|x\.com)/\S+', '', edited_text)
+                final_text = cleaned_text.strip()[:4096]
                 
                 with st.expander("Final Preview", expanded=True):
-                    st.markdown("**Text:**")
-                    st.text(final_text)  # Use st.text to show raw text without markdown formatting
+                    st.markdown("**Text that will be posted:**")
+                    st.write(final_text)
                     if "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]:
                         media_count = len(st.session_state.tweet_data["includes"]["media"])
                         st.info(f"**{media_count}** media items will be attached")
