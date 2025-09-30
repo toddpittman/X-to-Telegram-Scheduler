@@ -656,8 +656,10 @@ class SecureXTelegramScheduler:
                         with col_a:
                             st.write(f"**{name}**")
                             st.caption(cid)
+                            # Show full clickable link
                             if st.session_state.channel_links.get(name):
-                                st.caption(f"{st.session_state.channel_links[name][:30]}...")
+                                full_link = st.session_state.channel_links[name]
+                                st.markdown(f"[{full_link}]({full_link})")
                         with col_b:
                             select_clicked = st.button("Select", key=f"sel_{name}", help=f"Select {name}")
                             if select_clicked:
@@ -765,7 +767,7 @@ class SecureXTelegramScheduler:
                     if "selected_channel" in st.session_state:
                         link = st.session_state.channel_links.get(st.session_state.channel_name, "")
                         if link:
-                            st.info(f"Channel link: {link}")
+                            st.markdown(f"**Channel link:** [{link}]({link})")
                             if st.checkbox("Add channel link to post"):
                                 if link not in edited_text:
                                     edited_text = edited_text.strip() + f"\n\n{link}"
@@ -789,7 +791,7 @@ class SecureXTelegramScheduler:
                 
                 with st.expander("Final Preview", expanded=True):
                     st.markdown("**Text:**")
-                    st.markdown(final_text)
+                    st.text(final_text)  # Use st.text to show raw text without markdown formatting
                     if "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]:
                         media_count = len(st.session_state.tweet_data["includes"]["media"])
                         st.info(f"**{media_count}** media items will be attached")
