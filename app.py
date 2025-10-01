@@ -251,7 +251,7 @@ class SecureXTelegramScheduler:
         headers = {"Authorization": f"Bearer {self.config['X_BEARER_TOKEN']}"}
         params = {
             "expansions": "attachments.media_keys,author_id",
-            "tweet.fields": "attachments,author_id,text,created_at",
+            "tweet.fields": "attachments,author_id,text,created_at,entities",
             "media.fields": "type,url,variants,preview_image_url",
             "user.fields": "name,username"
         }
@@ -275,6 +275,23 @@ class SecureXTelegramScheduler:
                     data["data"] = tweet_data[0]
                 
                 st.success("Tweet fetched successfully!")
+                
+                # Process text to expand URLs if entities are present
+                tweet_obj = data["data"]
+                if "entities" in tweet_obj and "urls" in tweet_obj["entities"]:
+                    text = tweet_obj["text"]
+                    urls = tweet_obj["entities"]["urls"]
+                    
+                    # Replace t.co links with display URLs or expanded URLs
+                    for url_entity in reversed(urls):  # Reverse to maintain indices
+                        t_co_url = url_entity["url"]
+                        # Use display_url or expanded_url if available
+                        replacement = url_entity.get("display_url", url_entity.get("expanded_url", t_co_url))
+                        text = text.replace(t_co_url, replacement)
+                    
+                    # Update the tweet text with expanded URLs
+                    data["data"]["text"] = text
+                
                 return data
             elif response.status_code == 401:
                 st.error("Invalid X Bearer Token")
@@ -776,8 +793,8 @@ class SecureXTelegramScheduler:
                     else:
                         st.warning("No channel selected")
                 
-                # Always remove X/Twitter links automatically
-                cleaned_text = re.sub(r'https?://(twitter\.com|x\.com)/\S+', '', edited_text)
+                # Always remove X/Twitter links and t.co shortened links automatically
+                cleaned_text = re.sub(r'https?://(twitter\.com|x\.com|t\.co)/\S+', '', edited_text)
                 final_text = cleaned_text.strip()[:4096]
                 
                 with st.expander("Final Preview", expanded=True):
