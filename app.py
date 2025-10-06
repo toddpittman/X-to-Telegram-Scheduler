@@ -259,8 +259,7 @@ class SecureXTelegramScheduler:
             "expansions": "attachments.media_keys,author_id",
             "tweet.fields": "attachments,author_id,text,created_at,entities",
             "media.fields": "type,url,variants,preview_image_url",
-            "user.fields": "name,username",
-            "max_results": 100  # Get full text for long tweets
+            "user.fields": "name,username"
         }
         
         url = f"https://api.twitter.com/2/tweets/{tweet_id}"
