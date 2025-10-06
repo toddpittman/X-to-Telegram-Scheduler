@@ -253,7 +253,8 @@ class SecureXTelegramScheduler:
             "expansions": "attachments.media_keys,author_id",
             "tweet.fields": "attachments,author_id,text,created_at,entities",
             "media.fields": "type,url,variants,preview_image_url",
-            "user.fields": "name,username"
+            "user.fields": "name,username",
+            "max_results": 100  # Get full text for long tweets
         }
         
         url = f"https://api.twitter.com/2/tweets/{tweet_id}"
@@ -666,26 +667,50 @@ class SecureXTelegramScheduler:
             st.markdown("---")
             st.subheader("Your Channels")
             
+            # Add search/filter for channels
+            if len(st.session_state.channels) > 5:
+                search_channel = st.text_input("🔍 Search channels", placeholder="Type to filter...", key="search_ch")
+            else:
+                search_channel = ""
+            
             if st.session_state.channels:
-                for name, cid in st.session_state.channels.items():
+                # Filter channels based on search
+                filtered_channels = {
+                    name: cid for name, cid in st.session_state.channels.items()
+                    if search_channel.lower() in name.lower()
+                } if search_channel else st.session_state.channels
+                
+                if not filtered_channels and search_channel:
+                    st.info(f"No channels match '{search_channel}'")
+                
+                for name, cid in filtered_channels.items():
                     with st.container():
-                        col_a, col_b, col_c = st.columns([2, 1, 1])
-                        with col_a:
+                        # Compact display - single line per channel
+                        col_name, col_btns = st.columns([3, 2])
+                        
+                        with col_name:
+                            # Show channel name and truncated ID in one line
                             st.write(f"**{name}**")
-                            st.caption(cid)
-                            if st.session_state.channel_links.get(name):
-                                st.caption(f"🔗 {st.session_state.channel_links[name][:35]}...")
-                        with col_b:
-                            select_clicked = st.button("Select", key=f"sel_{name}", help=f"Select {name}")
-                            if select_clicked:
-                                st.session_state.selected_channel = cid
-                                st.session_state.channel_name = name
-                                st.rerun()
-                        with col_c:
-                            edit_clicked = st.button("Edit", key=f"edit_{name}", help=f"Edit {name}")
-                            if edit_clicked:
-                                st.session_state.editing_channel = name
-                                st.rerun()
+                            st.caption(f"{cid[:20]}...")
+                        
+                        with col_btns:
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                select_clicked = st.button("✓", key=f"sel_{name}", help=f"Select {name}", use_container_width=True)
+                                if select_clicked:
+                                    st.session_state.selected_channel = cid
+                                    st.session_state.channel_name = name
+                                    st.rerun()
+                            with btn_col2:
+                                edit_clicked = st.button("✏️", key=f"edit_{name}", help=f"Edit {name}", use_container_width=True)
+                                if edit_clicked:
+                                    st.session_state.editing_channel = name
+                                    st.rerun()
+                        
+                        # Show link as tiny caption if exists
+                        if st.session_state.channel_links.get(name):
+                            st.caption(f"🔗 {st.session_state.channel_links[name][:25]}...")
+                        
                         st.markdown("---")
             else:
                 st.info("No channels yet")
@@ -697,6 +722,14 @@ class SecureXTelegramScheduler:
         
         with tab1:
             st.header("Create Post")
+            
+            # Show selected channel prominently at the top
+            if "selected_channel" in st.session_state:
+                st.success(f"📢 Posting to: **{st.session_state.channel_name}** ({st.session_state.selected_channel})")
+            else:
+                st.warning("⚠️ No channel selected - Please select a channel from the sidebar")
+            
+            st.markdown("---")
             
             col1, col2 = st.columns([1, 2])
             
@@ -743,6 +776,10 @@ class SecureXTelegramScheduler:
                             st.markdown(f"**{user['name']}** @{user['username']}")
                     
                     st.text_area("Original Text", st.session_state.original_text, height=100, disabled=True)
+                    
+                    # Debug: Show raw API text
+                    if st.checkbox("Show raw API text for debugging"):
+                        st.code(st.session_state.tweet_data["data"].get("text", "No text"))
                     
                     if "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]:
                         media_list = st.session_state.tweet_data["includes"]["media"]
