@@ -570,7 +570,47 @@ class SecureXTelegramScheduler:
         else:
             return f"@{channel_input}"
     
-    def get_video_dimensions(self, video_path):
+    def reencode_video(self, input_path, output_path):
+        """Re-encode video to standard format for Telegram compatibility"""
+        try:
+            st.write(f"Re-encoding video for optimal quality...")
+            
+            cmd = [
+                'ffmpeg',
+                '-i', input_path,
+                '-c:v', 'libx264',           # H.264 codec
+                '-preset', 'fast',           # Balance speed vs quality
+                '-crf', '23',                # Quality (lower = better, 23 is good)
+                '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',  # Ensure even dimensions
+                '-c:a', 'aac',               # Audio codec
+                '-b:a', '128k',              # Audio bitrate
+                '-movflags', '+faststart',   # Enable streaming
+                '-y',                        # Overwrite output
+                output_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            
+            if result.returncode == 0:
+                # Check output file exists and has reasonable size
+                if os.path.exists(output_path):
+                    output_size = os.path.getsize(output_path)
+                    if output_size > 100000:  # At least 100KB
+                        st.success(f"Video re-encoded: {output_size/1024/1024:.1f}MB")
+                        return True
+                    else:
+                        st.error("Re-encoded video too small - may be corrupted")
+                        return False
+            else:
+                st.error(f"Re-encoding failed: {result.stderr[:200]}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            st.error("Video re-encoding timeout (>2 minutes)")
+            return False
+        except Exception as e:
+            st.error(f"Re-encoding error: {str(e)}")
+            return False
         """Get video dimensions and duration using FFprobe (part of FFmpeg)"""
         try:
             cmd = [
