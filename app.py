@@ -248,6 +248,12 @@ class SecureXTelegramScheduler:
             st.error("Missing tweet ID or token")
             return None
         
+        # Debug: Show what we're sending
+        st.write(f"**Debug Info:**")
+        st.write(f"Tweet ID: `{tweet_id}`")
+        st.write(f"Token exists: {bool(self.config['X_BEARER_TOKEN'])}")
+        st.write(f"Token preview: `{self.config['X_BEARER_TOKEN'][:20]}...`")
+        
         headers = {"Authorization": f"Bearer {self.config['X_BEARER_TOKEN']}"}
         params = {
             "expansions": "attachments.media_keys,author_id",
@@ -259,14 +265,20 @@ class SecureXTelegramScheduler:
         
         url = f"https://api.twitter.com/2/tweets/{tweet_id}"
         
+        st.write(f"API URL: `{url}`")
+        
         try:
             with st.spinner("Fetching tweet..."):
                 response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            st.write(f"**Response Status:** {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
                 if "data" not in data:
                     st.error("Invalid response")
+                    with st.expander("Debug: API Response"):
+                        st.json(data)
                     return None
                 
                 tweet_data = data["data"]
@@ -295,11 +307,20 @@ class SecureXTelegramScheduler:
                 
                 return data
             elif response.status_code == 401:
-                st.error("Invalid X Bearer Token")
+                st.error("Invalid X Bearer Token - Token is expired or incorrect")
+                st.write("Your X_BEARER_TOKEN needs to be updated in Render environment variables")
             elif response.status_code == 404:
-                st.error("Tweet not found")
+                st.error("Tweet not found - Check the URL is correct")
+            elif response.status_code == 400:
+                st.error("Bad Request - Invalid tweet URL or parameters")
+                st.write(f"Tweet ID extracted: {tweet_id}")
+                st.write("Make sure you're using the full X URL including the complete status ID")
+                with st.expander("Debug: Full API Response"):
+                    st.code(response.text)
             else:
                 st.error(f"API Error {response.status_code}")
+                with st.expander("Debug: Response Details"):
+                    st.code(response.text)
             return None
         except Exception as e:
             st.error(f"Error: {str(e)}")
