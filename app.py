@@ -577,7 +577,7 @@ class SecureXTelegramScheduler:
                 'ffprobe',
                 '-v', 'error',
                 '-select_streams', 'v:0',
-                '-show_entries', 'stream=width,height',
+                '-show_entries', 'stream=width,height,display_aspect_ratio',
                 '-of', 'json',
                 video_path
             ]
@@ -585,8 +585,11 @@ class SecureXTelegramScheduler:
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 if 'streams' in data and len(data['streams']) > 0:
-                    width = data['streams'][0].get('width', 0)
-                    height = data['streams'][0].get('height', 0)
+                    stream = data['streams'][0]
+                    width = stream.get('width', 0)
+                    height = stream.get('height', 0)
+                    dar = stream.get('display_aspect_ratio', '')
+                    st.write(f"Video info: {width}x{height}, DAR: {dar}")
                     return width, height
         except Exception as e:
             st.warning(f"Could not read video dimensions: {str(e)}")
@@ -595,9 +598,48 @@ class SecureXTelegramScheduler:
     def post_now(self, chat_id, content_data):
         text = content_data["text"]
         media_list = content_data.get("media", [])
-        if media_list:
+        
+        # Check user choices for long posts with media
+        post_media_choice = st.session_state.get("post_media_choice", True)
+        post_text_choice = st.session_state.get("post_text_choice", False)
+        
+        if media_list and len(text) > 1024:
+            # Long text with media - handle based on user choices
+            if post_media_choice and post_text_choice:
+                # Post both: media with truncated caption, then full text
+                st.write("Posting media with short caption...")
+                caption = text[:1000] + "..."
+                success1, msg_id1 = self.post_media_group(chat_id, caption, media_list)
+                
+                if success1:
+                    st.write("Posting full text separately...")
+                    time.sleep(1)
+                    success2, msg_id2 = self.post_text(chat_id, text)
+                    if success2:
+                        st.success("Posted media + full text in 2 messages")
+                        return True, msg_id1
+                    else:
+                        st.warning("Media posted but text failed")
+                        return True, msg_id1
+                return False, None
+                
+            elif post_media_choice:
+                # Only post media with truncated caption
+                caption = text[:1000]
+                return self.post_media_group(chat_id, caption, media_list)
+                
+            elif post_text_choice:
+                # Only post full text, no media
+                return self.post_text(chat_id, text)
+            else:
+                st.error("No posting option selected")
+                return False, None
+        
+        elif media_list:
+            # Normal media post (text under 1024)
             return self.post_media_group(chat_id, text, media_list)
         else:
+            # Text only
             return self.post_text(chat_id, text)
     
     def run(self):
@@ -820,12 +862,24 @@ class SecureXTelegramScheduler:
                 
                 with col1:
                     edited_text = st.text_area(
-                        "Edit text (4,096 chars max)", 
+                        "Edit text (1,024 chars for media posts, 4,096 for text-only)", 
                         value=st.session_state.original_text, 
                         height=200,
                         key="edit_text_area"
                     )
-                    st.caption(f"{len(edited_text)}/4,096 characters")
+                    
+                    # Check if there's media
+                    has_media = "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]
+                    max_length = 1024 if has_media else 4096
+                    
+                    char_count = len(edited_text)
+                    if char_count > max_length:
+                        st.error(f"Text too long! {char_count}/{max_length} characters")
+                    else:
+                        st.caption(f"{char_count}/{max_length} characters")
+                    
+                    if has_media:
+                        st.warning("⚠️ Media posts limited to 1,024 character captions by Telegram")
                     
                     if "selected_channel" in st.session_state:
                         link = st.session_state.channel_links.get(st.session_state.channel_name, "")
@@ -845,7 +899,38 @@ class SecureXTelegramScheduler:
                 
                 # Always remove X/Twitter links and t.co shortened links automatically
                 cleaned_text = re.sub(r'https?://(twitter\.com|x\.com|t\.co)/\S+', '', edited_text)
-                final_text = cleaned_text.strip()[:4096]
+                cleaned_text = cleaned_text.strip()
+                
+                # Check if posting media - limit to 1024 chars for captions
+                has_media = "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]
+                max_length = 1024 if has_media else 4096
+                
+                final_text = cleaned_text[:max_length]
+                
+                # Show options ONLY if text exceeds limit with media
+                text_too_long = has_media and len(cleaned_text) > 1024
+                
+                if text_too_long:
+                    st.error(f"⚠️ TEXT TOO LONG: {len(cleaned_text)} characters (limit: 1,024 for media posts)")
+                    st.markdown("**Choose posting options:**")
+                    
+                    col_opt1, col_opt2 = st.columns(2)
+                    with col_opt1:
+                        post_media = st.checkbox("Post media (truncated caption)", value=True, key="post_media_check")
+                    with col_opt2:
+                        post_full_text = st.checkbox("Post full text separately", value=True, key="post_text_check")
+                    
+                    if not post_media and not post_full_text:
+                        st.error("Select at least one option")
+                    
+                    st.session_state.post_media_choice = post_media
+                    st.session_state.post_text_choice = post_full_text
+                    st.session_state.text_too_long = True
+                else:
+                    # Normal post - reset choices
+                    st.session_state.post_media_choice = True
+                    st.session_state.post_text_choice = False
+                    st.session_state.text_too_long = False
                 
                 with st.expander("Final Preview", expanded=True):
                     st.markdown("**Text that will be posted:**")
@@ -855,10 +940,17 @@ class SecureXTelegramScheduler:
                         st.info(f"**{media_count}** media items will be attached")
                 
                 if "selected_channel" in st.session_state:
-                    if st.button("POST TO TELEGRAM", type="primary", use_container_width=True):
-                        st.write("=" * 50)
-                        st.write("**STARTING POST PROCESS**")
-                        st.write("=" * 50)
+                    # Only show POST button if valid selection or if text isn't too long
+                    can_post = not st.session_state.get("text_too_long", False) or (
+                        st.session_state.get("post_media_choice", False) or 
+                        st.session_state.get("post_text_choice", False)
+                    )
+                    
+                    if can_post:
+                        if st.button("POST TO TELEGRAM", type="primary", use_container_width=True):
+                            st.write("=" * 50)
+                            st.write("**STARTING POST PROCESS**")
+                            st.write("=" * 50)
                         
                         with st.spinner("Processing..."):
                             media_data = []
