@@ -684,34 +684,27 @@ class SecureXTelegramScheduler:
                     st.info(f"No channels match '{search_channel}'")
                 
                 for name, cid in filtered_channels.items():
-                    with st.container():
-                        # Compact display - single line per channel
-                        col_name, col_btns = st.columns([3, 2])
-                        
-                        with col_name:
-                            # Show channel name and truncated ID in one line
-                            st.write(f"**{name}**")
-                            st.caption(f"{cid[:20]}...")
-                        
-                        with col_btns:
-                            btn_col1, btn_col2 = st.columns(2)
-                            with btn_col1:
-                                select_clicked = st.button("✓", key=f"sel_{name}", help=f"Select {name}", use_container_width=True)
-                                if select_clicked:
-                                    st.session_state.selected_channel = cid
-                                    st.session_state.channel_name = name
-                                    st.rerun()
-                            with btn_col2:
-                                edit_clicked = st.button("✏️", key=f"edit_{name}", help=f"Edit {name}", use_container_width=True)
-                                if edit_clicked:
-                                    st.session_state.editing_channel = name
-                                    st.rerun()
-                        
-                        # Show link as tiny caption if exists
-                        if st.session_state.channel_links.get(name):
-                            st.caption(f"🔗 {st.session_state.channel_links[name][:25]}...")
-                        
-                        st.markdown("---")
+                    # Compact single-line display per channel
+                    st.write(f"**{name}**")
+                    st.caption(f"{cid[:25]}...")
+                    
+                    # Buttons side by side without nested columns
+                    select_clicked = st.button("✓ Select", key=f"sel_{name}", help=f"Select {name}", use_container_width=True)
+                    if select_clicked:
+                        st.session_state.selected_channel = cid
+                        st.session_state.channel_name = name
+                        st.rerun()
+                    
+                    edit_clicked = st.button("✏️ Edit", key=f"edit_{name}", help=f"Edit {name}", use_container_width=True)
+                    if edit_clicked:
+                        st.session_state.editing_channel = name
+                        st.rerun()
+                    
+                    # Show link if exists
+                    if st.session_state.channel_links.get(name):
+                        st.caption(f"🔗 {st.session_state.channel_links[name][:30]}...")
+                    
+                    st.markdown("---")
             else:
                 st.info("No channels yet")
             
