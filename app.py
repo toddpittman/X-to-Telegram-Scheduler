@@ -571,29 +571,36 @@ class SecureXTelegramScheduler:
             return f"@{channel_input}"
     
     def get_video_dimensions(self, video_path):
-        """Get video dimensions using FFprobe (part of FFmpeg)"""
+        """Get video dimensions and duration using FFprobe (part of FFmpeg)"""
         try:
             cmd = [
                 'ffprobe',
                 '-v', 'error',
                 '-select_streams', 'v:0',
-                '-show_entries', 'stream=width,height,display_aspect_ratio',
+                '-show_entries', 'stream=width,height,display_aspect_ratio:format=duration',
                 '-of', 'json',
                 video_path
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
+                width, height, duration = 0, 0, 0
+                
                 if 'streams' in data and len(data['streams']) > 0:
                     stream = data['streams'][0]
                     width = stream.get('width', 0)
                     height = stream.get('height', 0)
                     dar = stream.get('display_aspect_ratio', '')
                     st.write(f"Video info: {width}x{height}, DAR: {dar}")
-                    return width, height
+                
+                if 'format' in data:
+                    duration = int(float(data['format'].get('duration', 0)))
+                    st.write(f"Duration: {duration}s")
+                
+                return width, height, duration
         except Exception as e:
-            st.warning(f"Could not read video dimensions: {str(e)}")
-        return None, None
+            st.warning(f"Could not read video info: {str(e)}")
+        return None, None, None
     
     def post_now(self, chat_id, content_data):
         text = content_data["text"]
