@@ -688,14 +688,14 @@ class SecureXTelegramScheduler:
                     st.write(f"**{name}**")
                     st.caption(f"{cid[:25]}...")
                     
-                    # Buttons side by side without nested columns
-                    select_clicked = st.button("✓ Select", key=f"sel_{name}", help=f"Select {name}", use_container_width=True)
+                    # Buttons with unique keys
+                    select_clicked = st.button("✓ Select", key=f"select_btn_{name}", help=f"Select {name}", use_container_width=True)
                     if select_clicked:
                         st.session_state.selected_channel = cid
                         st.session_state.channel_name = name
                         st.rerun()
                     
-                    edit_clicked = st.button("✏️ Edit", key=f"edit_{name}", help=f"Edit {name}", use_container_width=True)
+                    edit_clicked = st.button("✏️ Edit", key=f"edit_btn_{name}", help=f"Edit {name}", use_container_width=True)
                     if edit_clicked:
                         st.session_state.editing_channel = name
                         st.rerun()
