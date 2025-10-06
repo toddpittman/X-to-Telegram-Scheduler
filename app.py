@@ -815,6 +815,7 @@ class SecureXTelegramScheduler:
                             st.session_state.tweet_data = tweet_data
                             st.session_state.original_text = tweet_data["data"].get("text", "")
                             st.session_state.tweet_url = x_url
+                            # Don't auto-post, just rerun to show preview
                             st.rerun()
                     else:
                         st.error("Invalid URL format")
@@ -940,14 +941,15 @@ class SecureXTelegramScheduler:
                         st.info(f"**{media_count}** media items will be attached")
                 
                 if "selected_channel" in st.session_state:
-                    # Only show POST button if valid selection or if text isn't too long
-                    can_post = not st.session_state.get("text_too_long", False) or (
-                        st.session_state.get("post_media_choice", False) or 
-                        st.session_state.get("post_text_choice", False)
-                    )
-                    
-                    if can_post:
-                        if st.button("POST TO TELEGRAM", type="primary", use_container_width=True):
+                    if st.button("POST TO TELEGRAM", type="primary", use_container_width=True):
+                        # Check if text is too long and no options selected
+                        text_too_long = st.session_state.get("text_too_long", False)
+                        post_media = st.session_state.get("post_media_choice", True)
+                        post_text = st.session_state.get("post_text_choice", False)
+                        
+                        if text_too_long and not post_media and not post_text:
+                            st.error("Please select at least one posting option above")
+                        else:
                             st.write("=" * 50)
                             st.write("**STARTING POST PROCESS**")
                             st.write("=" * 50)
