@@ -2,11 +2,12 @@ services:
   - type: web
     name: x-telegram-scheduler
     env: python
+    runtime: python
     buildCommand: |
-      apt-get update && apt-get install -y ffmpeg
+      pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: "3.11"
     autoDeploy: true

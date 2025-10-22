@@ -1,4 +1,4 @@
-# app.py - COMPLETE VERSION WITH FFMPEG AND DATABASE SCHEDULING
+# app.py - COMPLETE VERSION WITH FFMPEG SUPPORT
 import streamlit as st
 import requests
 import json
@@ -8,8 +8,6 @@ import tempfile
 from datetime import datetime, timedelta
 import time
 import subprocess
-import psycopg2
-from psycopg2.extras import Json
 
 st.set_page_config(
     page_title="X to Telegram Scheduler",
@@ -17,54 +15,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Database helper functions
-def get_db_connection():
-    """Get PostgreSQL connection"""
-    try:
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            st.error("DATABASE_URL not found in environment")
-            return None
-        return psycopg2.connect(database_url)
-    except Exception as e:
-        st.error(f"Database connection error: {str(e)}")
-        return None
-
-def init_database():
-    """Initialize database tables"""
-    conn = get_db_connection()
-    if not conn:
-        return False
-    try:
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS scheduled_posts (
-                id SERIAL PRIMARY KEY,
-                chat_id VARCHAR(255) NOT NULL,
-                content_text TEXT NOT NULL,
-                media_info TEXT,
-                channel_name VARCHAR(255),
-                schedule_time TIMESTAMP NOT NULL,
-                status VARCHAR(50) DEFAULT 'scheduled',
-                user_name VARCHAR(255),
-                created_at TIMESTAMP DEFAULT NOW(),
-                posted_at TIMESTAMP,
-                error TEXT
-            )
-        """)
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True
-    except Exception as e:
-        st.error(f"Database init error: {str(e)}")
-        return False
-
-# Initialize database on app start
-if 'db_initialized' not in st.session_state:
-    if init_database():
-        st.session_state.db_initialized = True
 
 st.markdown("""
 <style>
@@ -692,102 +642,6 @@ class SecureXTelegramScheduler:
             st.warning(f"Could not read video info: {str(e)}")
         return None, None, None
     
-    def schedule_post(self, chat_id, content_data, schedule_time, channel_name):
-        """Schedule a post for later - saves to database"""
-        conn = get_db_connection()
-        if not conn:
-            st.error("Could not connect to database")
-            return False
-        
-        try:
-            cur = conn.cursor()
-            
-            # Store media info as JSON string
-            media_info = json.dumps({
-                "has_media": len(content_data.get("media", [])) > 0,
-                "media_count": len(content_data.get("media", []))
-            })
-            
-            cur.execute("""
-                INSERT INTO scheduled_posts 
-                (chat_id, content_text, media_info, channel_name, schedule_time, user_name)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                chat_id,
-                content_data["text"],
-                media_info,
-                channel_name,
-                schedule_time,
-                st.session_state.current_user
-            ))
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            st.success(f"⏰ Scheduled for {schedule_time.strftime('%Y-%m-%d %H:%M')}")
-            st.info("Note: Scheduled posts require the background worker to be running")
-            return True
-            
-        except Exception as e:
-            st.error(f"Failed to schedule: {str(e)}")
-            return False
-    
-    def check_scheduled_posts(self):
-        """Get scheduled posts from database for display"""
-        conn = get_db_connection()
-        if not conn:
-            return []
-        
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT id, channel_name, content_text, schedule_time, user_name, media_info
-                FROM scheduled_posts
-                WHERE status = 'scheduled' AND schedule_time > NOW()
-                ORDER BY schedule_time ASC
-            """)
-            
-            scheduled = []
-            for row in cur.fetchall():
-                scheduled.append({
-                    "id": row[0],
-                    "channel_name": row[1],
-                    "text": row[2],
-                    "schedule_time": row[3],
-                    "user": row[4],
-                    "media_info": json.loads(row[5]) if row[5] else {}
-                })
-            
-            cur.close()
-            conn.close()
-            return scheduled
-            
-        except Exception as e:
-            st.error(f"Error loading scheduled posts: {str(e)}")
-            return []
-    
-    def cancel_scheduled_post(self, post_id):
-        """Cancel a scheduled post"""
-        conn = get_db_connection()
-        if not conn:
-            return False
-        
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE scheduled_posts 
-                SET status = 'cancelled'
-                WHERE id = %s
-            """, (post_id,))
-            conn.commit()
-            cur.close()
-            conn.close()
-            return True
-        except Exception as e:
-            st.error(f"Failed to cancel: {str(e)}")
-            return False
-    
     def post_now(self, chat_id, content_data):
         text = content_data["text"]
         media_list = content_data.get("media", [])
@@ -1090,28 +944,6 @@ class SecureXTelegramScheduler:
                         st.caption(f"ID: {st.session_state.selected_channel}")
                     else:
                         st.warning("No channel selected")
-                    
-                    st.markdown("---")
-                    st.markdown("**Schedule:**")
-                    
-                    schedule_type = st.radio(
-                        "When to post:",
-                        ["Post Now", "Schedule for Later"],
-                        key="schedule_radio"
-                    )
-                    
-                    if schedule_type == "Schedule for Later":
-                        schedule_date = st.date_input("Date:", min_value=datetime.now().date())
-                        schedule_time = st.time_input("Time:", value=datetime.now().time())
-                        
-                        schedule_datetime = datetime.combine(schedule_date, schedule_time)
-                        
-                        if schedule_datetime <= datetime.now():
-                            st.error("Scheduled time must be in the future")
-                        else:
-                            st.info(f"Will post on {schedule_datetime.strftime('%Y-%m-%d at %H:%M')}")
-                    else:
-                        schedule_datetime = None
                 
                 # Always remove X/Twitter links and t.co shortened links automatically
                 cleaned_text = re.sub(r'https?://(twitter\.com|x\.com|t\.co)/\S+', '', edited_text)
@@ -1156,62 +988,15 @@ class SecureXTelegramScheduler:
                         st.info(f"**{media_count}** media items will be attached")
                 
                 if "selected_channel" in st.session_state:
-                    # Check for scheduled posts that are due
-                    self.check_scheduled_posts()
-                    
                     if st.button("POST TO TELEGRAM", type="primary", use_container_width=True):
                         # Check if text is too long and no options selected
                         text_too_long = st.session_state.get("text_too_long", False)
                         post_media = st.session_state.get("post_media_choice", True)
                         post_text = st.session_state.get("post_text_choice", False)
                         
-                        # Get schedule settings
-                        schedule_type = st.session_state.get("schedule_radio", "Post Now")
-                        
                         if text_too_long and not post_media and not post_text:
                             st.error("Please select at least one posting option above")
-                        elif schedule_type == "Schedule for Later":
-                            # Handle scheduled post
-                            schedule_date = st.session_state.get("schedule_date")
-                            schedule_time = st.session_state.get("schedule_time")
-                            
-                            if schedule_date and schedule_time:
-                                schedule_datetime = datetime.combine(schedule_date, schedule_time)
-                                
-                                if schedule_datetime <= datetime.now():
-                                    st.error("Scheduled time must be in the future")
-                                else:
-                                    # Download media
-                                    media_data = []
-                                    if "includes" in st.session_state.tweet_data and "media" in st.session_state.tweet_data["includes"]:
-                                        media_data = self.download_media_batch(
-                                            st.session_state.tweet_data["includes"]["media"],
-                                            st.session_state.tweet_data["data"]["id"]
-                                        )
-                                    
-                                    content_data = {
-                                        "text": final_text,
-                                        "media": media_data,
-                                        "channel_name": st.session_state.channel_name
-                                    }
-                                    
-                                    self.schedule_post(
-                                        st.session_state.selected_channel,
-                                        content_data,
-                                        schedule_datetime,
-                                        st.session_state.channel_name
-                                    )
-                                    
-                                    # Clear form
-                                    del st.session_state.tweet_data
-                                    del st.session_state.original_text
-                                    if "tweet_url" in st.session_state:
-                                        del st.session_state.tweet_url
-                                    
-                                    time.sleep(1)
-                                    st.rerun()
                         else:
-                            # Post immediately
                             st.write("=" * 50)
                             st.write("**STARTING POST PROCESS**")
                             st.write("=" * 50)
@@ -1272,30 +1057,6 @@ class SecureXTelegramScheduler:
         
         with tab2:
             st.header("Activity Log")
-            
-            # Show scheduled posts from database
-            scheduled = self.check_scheduled_posts()
-            if scheduled:
-                st.subheader("⏰ Scheduled Posts")
-                st.info(f"{len(scheduled)} posts scheduled")
-                
-                for post in scheduled:
-                    time_remaining = (post['schedule_time'] - datetime.now()).total_seconds() / 60
-                    with st.expander(f"📅 {post['channel_name']} - {post['schedule_time'].strftime('%Y-%m-%d %H:%M')}"):
-                        st.write(f"**Text preview:** {post['text'][:100]}...")
-                        if post.get('media_info', {}).get('has_media'):
-                            st.write(f"**Media:** {post['media_info']['media_count']} items")
-                        st.write(f"**Scheduled by:** {post['user']}")
-                        st.write(f"**Time remaining:** {time_remaining:.0f} minutes")
-                        
-                        if st.button("🗑️ Cancel Schedule", key=f"cancel_sched_{post['id']}"):
-                            if self.cancel_scheduled_post(post['id']):
-                                st.success("Schedule cancelled")
-                                st.rerun()
-                
-                st.markdown("---")
-            
-            st.subheader("📊 Posted Content")
             
             if "activity_log" in st.session_state and st.session_state.activity_log:
                 st.info(f"**Total posts:** {len(st.session_state.activity_log)}")
